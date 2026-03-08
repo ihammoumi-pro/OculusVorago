@@ -157,7 +157,6 @@ class APIExtractor(IExtractor):
         session = _build_session(
             self.headers, self.bearer_token, self.max_retries, self.backoff_factor
         )
-        total = 0
         try:
             if self.pagination_style == "offset":
                 yield from self._extract_offset(session, source_uri)
@@ -165,9 +164,7 @@ class APIExtractor(IExtractor):
                 yield from self._extract_cursor(session, source_uri)
             else:
                 yield from self._extract_next_url(session, source_uri)
-            logger.info(
-                "APIExtractor: finished '%s' — %d records emitted", source_uri, total
-            )
+            logger.info("APIExtractor: finished '%s'", source_uri)
         finally:
             session.close()
 
@@ -250,7 +247,7 @@ class APIExtractor(IExtractor):
             params: dict[str, Any] = {}
             if cursor:
                 params["cursor"] = cursor
-            body = self._fetch_page(session, url, params=params or None)
+            body = self._fetch_page(session, url, params=params)
             records = self._records_from_page(body)
             yield from records
             next_cursor = body.get("next_cursor") if isinstance(body, dict) else None

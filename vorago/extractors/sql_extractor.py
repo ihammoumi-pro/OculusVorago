@@ -114,7 +114,7 @@ class SQLExtractor(IExtractor):
                 columns = list(result.keys())
                 logger.debug("SQLExtractor: columns = %s", columns)
                 for row in result:
-                    yield dict(zip(columns, row, strict=False))
+                    yield dict(zip(columns, row, strict=True))
                     row_count += 1
         except Exception:
             logger.error(
