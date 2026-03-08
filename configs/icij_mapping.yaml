@@ -1,0 +1,85 @@
+# ICIJ Offshore Leaks — OculusVorago Mapping Configuration
+#
+# This file drives the DynamicMapper without any ICIJ-specific logic in
+# the Python source code.  All dataset knowledge lives here.
+#
+# Dataset columns (ICIJ officers CSV excerpt):
+#   node_id, name, country_codes, countries, status, sourceID,
+#   valid_until, note, entity_id, entity_name, entity_jurisdiction,
+#   entity_incorporation_date, relationship_type
+#
+# Running example:
+#   python main.py run-pipeline \
+#     --extractor csv \
+#     --source ./data/icij_officers.csv \
+#     --config ./configs/icij_mapping.yaml \
+#     --loader stdout
+
+source_system_name: ICIJ_Offshore_Leaks
+default_classification: UNCLASSIFIED
+kafka_topic: oculus.ingestion.raw
+
+entities:
+  # -----------------------------------------------------------------------
+  # Map the "officer" side of the row to a PERSON entity.
+  # Some officers are companies — for a production deployment you would
+  # add a second entity block with target_entity_type: ORGANIZATION and use
+  # a conditional field or a separate config file.
+  # -----------------------------------------------------------------------
+  - target_entity_type: PERSON
+    property_mappings:
+      node_id:
+        source_field: node_id
+        cast_as: str
+      full_name:
+        source_field: name
+        cast_as: str
+      country_codes:
+        source_field: country_codes
+        cast_as: str
+      countries:
+        source_field: countries
+        cast_as: str
+      status:
+        source_field: status
+        cast_as: str
+      source_id:
+        source_field: sourceID
+        cast_as: str
+      valid_until:
+        source_field: valid_until
+        cast_as: str
+      note:
+        source_field: note
+        cast_as: str
+
+  # -----------------------------------------------------------------------
+  # Map the referenced offshore entity to a COMPANY entity.
+  # -----------------------------------------------------------------------
+  - target_entity_type: COMPANY
+    property_mappings:
+      node_id:
+        source_field: entity_id
+        cast_as: str
+      name:
+        source_field: entity_name
+        cast_as: str
+      jurisdiction:
+        source_field: entity_jurisdiction
+        cast_as: str
+      incorporation_date:
+        source_field: entity_incorporation_date
+        cast_as: date
+
+links:
+  # -----------------------------------------------------------------------
+  # Connect the PERSON officer to the COMPANY entity via the relationship
+  # type found in the CSV itself.
+  # -----------------------------------------------------------------------
+  - source_entity_type: PERSON
+    target_entity_type: COMPANY
+    relationship_type: OFFICER_OF
+    property_mappings:
+      relationship_label:
+        source_field: relationship_type
+        cast_as: str
