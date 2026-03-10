@@ -10,10 +10,11 @@ kind: Job
 metadata:
   # Include a unique suffix (e.g. dataset name + date) to allow re-runs
   name: vorago-batch-icij-2024
-  namespace: oculus
+  namespace: oculus-apps
   labels:
     app.kubernetes.io/name: vorago
     app.kubernetes.io/component: etl-batch
+    app.kubernetes.io/managed-by: OculusCodex
 spec:
   # Retry up to 3 times on failure before marking the Job as failed
   backoffLimit: 3
@@ -24,6 +25,7 @@ spec:
       labels:
         app.kubernetes.io/name: vorago
         app.kubernetes.io/component: etl-batch
+        app.kubernetes.io/managed-by: OculusCodex
     spec:
       containers:
         - name: vorago
@@ -43,17 +45,25 @@ spec:
             - "kafka"
             - "--log-level"
             - "INFO"
-          env:
-            - name: KAFKA_BOOTSTRAP_SERVERS
-              valueFrom:
-                secretKeyRef:
-                  name: vorago-secret
-                  key: KAFKA_BOOTSTRAP_SERVERS
-            - name: LOG_LEVEL
-              valueFrom:
-                configMapKeyRef:
-                  name: vorago-config
-                  key: LOG_LEVEL
+          # Global platform ConfigMaps/Secrets are mounted via envFrom as required
+          # by the OculusCodex platform convention (see OculusCodex PR #1).
+          # This pattern loads all keys from each resource; the keys consumed by
+          # Vorago are: KAFKA_BOOTSTRAP_SERVERS (oculus-kafka-config),
+          # LOG_LEVEL and KAFKA_TOPIC (vorago-config).
+          # App-specific refs are listed last so their values win on any collision.
+          envFrom:
+            - configMapRef:
+                name: oculus-kafka-config
+            - configMapRef:
+                name: oculus-postgres-config
+            - configMapRef:
+                name: oculus-platform-config
+            - secretRef:
+                name: global-platform-secrets
+            - configMapRef:
+                name: vorago-config      # Vorago-specific keys (KAFKA_TOPIC, LOG_LEVEL)
+            - secretRef:
+                name: vorago-secret      # Vorago-specific secrets (reserved for future use)
           resources:
             requests:
               cpu: "500m"
