@@ -1,0 +1,62 @@
+# =============================================================================
+# Neo4j — Helm values override for the official Neo4j Helm chart
+#
+# Install command:
+#
+#   helm repo add neo4j https://helm.neo4j.com/neo4j
+#   helm repo update
+#
+#   helm upgrade --install neo4j neo4j/neo4j \
+#     --namespace oculus \
+#     --create-namespace \
+#     --version ">=5.0.0" \
+#     -f infra/helm-values/neo4j-values.yaml
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Neo4j edition (community = free, enterprise = licence required)
+# ---------------------------------------------------------------------------
+neo4j:
+  name: neo4j
+  edition: community
+
+  # Load credentials from the Kubernetes Secret we created in 01-secrets.yaml
+  passwordFromSecret: oculus-neo4j-secret
+
+# ---------------------------------------------------------------------------
+# Volumes — Persistent Volume Claims for graph data
+# ---------------------------------------------------------------------------
+volumes:
+  data:
+    mode: defaultStorageClass
+    defaultStorageClass:
+      requests:
+        storage: 20Gi
+
+# ---------------------------------------------------------------------------
+# Resource limits
+# ---------------------------------------------------------------------------
+resources:
+  requests:
+    cpu: "500m"
+    memory: "2Gi"
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+
+# ---------------------------------------------------------------------------
+# Service — ClusterIP (accessible only within the cluster)
+# ---------------------------------------------------------------------------
+services:
+  neo4j:
+    enabled: true
+    spec:
+      type: ClusterIP
+
+# ---------------------------------------------------------------------------
+# JVM heap settings (tune based on available memory)
+# ---------------------------------------------------------------------------
+config:
+  server.memory.heap.initial_size: "1G"
+  server.memory.heap.max_size: "2G"
+  server.memory.pagecache.size: "512M"

@@ -1,0 +1,9 @@
+# =============================================================================
+# Namespace — all Oculus platform resources live in the "oculus" namespace
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oculus
+  labels:
+    app.kubernetes.io/part-of: oculus-platform

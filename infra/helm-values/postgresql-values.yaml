@@ -1,0 +1,80 @@
+# =============================================================================
+# PostgreSQL with PostGIS — Bitnami Helm values override
+#
+# Install command:
+#
+#   helm upgrade --install postgres bitnami/postgresql \
+#     --namespace oculus \
+#     --create-namespace \
+#     --version ">=15.5.0" \
+#     -f infra/helm-values/postgresql-values.yaml
+#
+# Add the Bitnami chart repo first (once):
+#   helm repo add bitnami https://charts.bitnami.com/bitnami
+#   helm repo update
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Authentication — reference the Kubernetes Secret we created in 01-secrets.yaml
+# ---------------------------------------------------------------------------
+auth:
+  existingSecret: oculus-db-secret
+  secretKeys:
+    adminPasswordKey: POSTGRES_PASSWORD
+    userPasswordKey: POSTGRES_PASSWORD
+  # This value must match the POSTGRES_USER key in the oculus-db-secret Secret.
+  # The chart uses existingSecret for the password but still requires the username here.
+  username: "CHANGE_ME"
+  database: "oculusdb"        # must match POSTGRES_DB in Secret
+
+# ---------------------------------------------------------------------------
+# PostGIS extension — use the postgis image variant
+# ---------------------------------------------------------------------------
+image:
+  repository: postgis/postgis
+  tag: "16-3.4"
+  pullPolicy: IfNotPresent
+
+# ---------------------------------------------------------------------------
+# Primary node configuration
+# ---------------------------------------------------------------------------
+primary:
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""       # leave empty to use default StorageClass
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
+  # Initialise PostGIS extension on first boot
+  initdb:
+    scripts:
+      init-postgis.sql: |
+        CREATE EXTENSION IF NOT EXISTS postgis;
+        CREATE EXTENSION IF NOT EXISTS postgis_topology;
+
+# ---------------------------------------------------------------------------
+# Replication / HA (optional — enable for production HA)
+# ---------------------------------------------------------------------------
+readReplicas:
+  replicaCount: 1
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+# ---------------------------------------------------------------------------
+# Metrics sidecar for Prometheus scraping (optional)
+# ---------------------------------------------------------------------------
+metrics:
+  enabled: true

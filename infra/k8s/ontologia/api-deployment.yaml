@@ -1,0 +1,156 @@
+# =============================================================================
+# OculusOntologia — FastAPI Backend (GraphQL API)
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Deployment
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ontologia-api
+  namespace: oculus
+  labels:
+    app: ontologia-api
+    app.kubernetes.io/part-of: oculus-platform
+    app.kubernetes.io/component: backend-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ontologia-api
+  template:
+    metadata:
+      labels:
+        app: ontologia-api
+        app.kubernetes.io/part-of: oculus-platform
+        app.kubernetes.io/component: backend-api
+    spec:
+      # Spread pods across nodes for high availability
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: ontologia-api
+      containers:
+        - name: ontologia-api
+          # Replace with your actual image registry and tag
+          image: ghcr.io/ihammoumi-pro/oculus-ontologia:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            # Gunicorn / Uvicorn settings from ConfigMap
+            - name: GUNICORN_WORKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: oculus-app-config
+                  key: GUNICORN_WORKERS
+            - name: GUNICORN_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: oculus-app-config
+                  key: GUNICORN_TIMEOUT
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: oculus-app-config
+                  key: LOG_LEVEL
+          # Load all sensitive credentials from Secrets
+          envFrom:
+            - secretRef:
+                name: oculus-db-secret
+            - secretRef:
+                name: oculus-neo4j-secret
+            - secretRef:
+                name: oculus-kafka-secret
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1001
+      restartPolicy: Always
+
+---
+# ---------------------------------------------------------------------------
+# Service (ClusterIP)
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: ontologia-api-svc
+  namespace: oculus
+  labels:
+    app: ontologia-api
+    app.kubernetes.io/part-of: oculus-platform
+    app.kubernetes.io/component: backend-api
+spec:
+  type: ClusterIP
+  selector:
+    app: ontologia-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+
+---
+# ---------------------------------------------------------------------------
+# HorizontalPodAutoscaler — scale on CPU utilisation
+# ---------------------------------------------------------------------------
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ontologia-api-hpa
+  namespace: oculus
+  labels:
+    app: ontologia-api
+    app.kubernetes.io/part-of: oculus-platform
+    app.kubernetes.io/component: backend-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ontologia-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

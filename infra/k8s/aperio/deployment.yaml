@@ -1,0 +1,108 @@
+# =============================================================================
+# OculusAperio — Next.js Frontend
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Deployment
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aperio
+  namespace: oculus
+  labels:
+    app: aperio
+    app.kubernetes.io/part-of: oculus-platform
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aperio
+  template:
+    metadata:
+      labels:
+        app: aperio
+        app.kubernetes.io/part-of: oculus-platform
+        app.kubernetes.io/component: frontend
+    spec:
+      # Spread pods across nodes for high availability
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: aperio
+      containers:
+        - name: aperio
+          # Replace with your actual image registry and tag
+          image: ghcr.io/ihammoumi-pro/oculus-aperio:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            # Non-sensitive config from ConfigMap
+            - name: NEXT_PUBLIC_GRAPHQL_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: oculus-app-config
+                  key: NEXT_PUBLIC_GRAPHQL_URL
+            - name: NEXT_PUBLIC_GRAPHQL_EXTERNAL_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: oculus-app-config
+                  key: NEXT_PUBLIC_GRAPHQL_EXTERNAL_URL
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          # No persistent filesystem state (Twelve-Factor App compliance)
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1001
+      restartPolicy: Always
+
+---
+# ---------------------------------------------------------------------------
+# Service (ClusterIP)
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: aperio-svc
+  namespace: oculus
+  labels:
+    app: aperio
+    app.kubernetes.io/part-of: oculus-platform
+    app.kubernetes.io/component: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: aperio
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

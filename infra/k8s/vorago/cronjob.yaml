@@ -1,0 +1,86 @@
+# =============================================================================
+# OculusVorago — Scheduled Batch ETL CronJob
+# Use this manifest to run the ETL pipeline on a recurring schedule,
+# e.g. nightly ingestion of updated datasets.
+#
+# Adjust the "schedule" field (standard cron syntax) and the pipeline
+# args (--source, --config, etc.) to match your use-case.
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vorago-scheduled-ingest
+  namespace: oculus
+  labels:
+    app: vorago-cronjob
+    app.kubernetes.io/part-of: oculus-platform
+    app.kubernetes.io/component: etl-scheduled
+spec:
+  # Run every night at 02:00 UTC — adjust to your requirements
+  schedule: "0 2 * * *"
+  # Prevent concurrent job runs (e.g. if a previous run is still executing)
+  concurrencyPolicy: Forbid
+  # Keep the last 3 successful Job records for debugging
+  successfulJobsHistoryLimit: 3
+  # Keep the last 1 failed Job record for debugging
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: vorago-cronjob
+            app.kubernetes.io/part-of: oculus-platform
+            app.kubernetes.io/component: etl-scheduled
+        spec:
+          containers:
+            - name: vorago
+              image: ghcr.io/ihammoumi-pro/oculus-vorago:latest
+              imagePullPolicy: Always
+              # ENTRYPOINT is ["python", "main.py"] — supply the pipeline arguments here.
+              args:
+                - "run-pipeline"
+                - "--extractor"
+                - "csv"
+                - "--source"
+                - "/data/input.csv"
+                - "--config"
+                - "/configs/icij_mapping.yaml"
+                - "--loader"
+                - "kafka"
+                - "--log-level"
+                - "INFO"
+              env:
+                - name: KAFKA_BOOTSTRAP_SERVERS
+                  valueFrom:
+                    secretKeyRef:
+                      name: oculus-kafka-secret
+                      key: KAFKA_BOOTSTRAP_SERVERS
+                - name: LOG_LEVEL
+                  valueFrom:
+                    configMapKeyRef:
+                      name: oculus-app-config
+                      key: VORAGO_LOG_LEVEL
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "1Gi"
+                limits:
+                  cpu: "2000m"
+                  memory: "4Gi"
+              volumeMounts:
+                - name: data-volume
+                  mountPath: /data
+                  readOnly: true
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: true
+                runAsUser: 1001
+          restartPolicy: OnFailure
+          volumes:
+            - name: data-volume
+              persistentVolumeClaim:
+                claimName: vorago-data-pvc

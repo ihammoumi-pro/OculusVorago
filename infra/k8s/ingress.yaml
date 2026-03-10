@@ -1,0 +1,87 @@
+# =============================================================================
+# Ingress — NGINX Ingress Controller
+# Routes external traffic to the correct backend service.
+#
+# Prerequisites:
+#   1. NGINX Ingress Controller must be installed in your cluster:
+#        helm upgrade --install ingress-nginx ingress-nginx \
+#          --repo https://kubernetes.github.io/ingress-nginx \
+#          --namespace ingress-nginx --create-namespace
+#
+#   2. Update "host" below to your actual domain.
+#
+#   3. For TLS, create a certificate Secret (or use cert-manager):
+#        kubectl create secret tls oculus-tls \
+#          --namespace oculus \
+#          --cert=path/to/cert.pem \
+#          --key=path/to/key.pem
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oculus-ingress
+  namespace: oculus
+  labels:
+    app.kubernetes.io/part-of: oculus-platform
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # Enable CORS if the frontend and backend are on different sub-paths
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    # Redirect all HTTP traffic to HTTPS
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  # Replace "oculus.example.com" with your actual public domain
+  tls:
+    - hosts:
+        - oculus.example.com
+      secretName: oculus-tls
+  rules:
+    - host: oculus.example.com
+      http:
+        paths:
+          # ---------------------------------------------------------------
+          # Route /graphql → OculusOntologia API (FastAPI / Strawberry)
+          # ---------------------------------------------------------------
+          - path: /graphql
+            pathType: Prefix
+            backend:
+              service:
+                name: ontologia-api-svc
+                port:
+                  name: http
+
+          # ---------------------------------------------------------------
+          # Route /api → OculusOntologia API (REST endpoints)
+          # ---------------------------------------------------------------
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: ontologia-api-svc
+                port:
+                  name: http
+
+          # ---------------------------------------------------------------
+          # Route /health → OculusOntologia API (health-check endpoint)
+          # ---------------------------------------------------------------
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: ontologia-api-svc
+                port:
+                  name: http
+
+          # ---------------------------------------------------------------
+          # Route / (catch-all) → OculusAperio Next.js frontend
+          # Must be last so more specific paths above take precedence
+          # ---------------------------------------------------------------
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aperio-svc
+                port:
+                  name: http
