@@ -54,6 +54,15 @@ class EntityMapping(BaseModel):
             "Override the top-level default_classification for this entity."
         ),
     )
+    classification_column: str | None = Field(
+        default=None,
+        description=(
+            "Optional raw-data column whose value is used as the classification label "
+            "for this entity.  Takes precedence over classification_override and "
+            "default_classification.  If the column is absent or empty in a given row, "
+            "the mapper falls back to classification_override then default_classification."
+        ),
+    )
 
 
 class LinkMapping(BaseModel):
@@ -84,6 +93,15 @@ class LinkMapping(BaseModel):
         default=None,
         description=(
             "Override the top-level default_classification for this link."
+        ),
+    )
+    classification_column: str | None = Field(
+        default=None,
+        description=(
+            "Optional raw-data column whose value is used as the classification label "
+            "for this link.  Takes precedence over classification_override and "
+            "default_classification.  If the column is absent or empty in a given row, "
+            "the mapper falls back to classification_override then default_classification."
         ),
     )
 

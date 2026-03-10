@@ -205,6 +205,142 @@ class TestDynamicMapperEntityMapping:
         assert mapper.map_record({"foo": "bar"}, config) == []
 
 
+class TestClassificationResolution:
+    """Tests for the dynamic classification_column resolution logic."""
+
+    def test_classification_column_used_when_present(self, mapper: DynamicMapper) -> None:
+        config = MappingConfig(
+            source_system_name="SYS",
+            default_classification="UNCLASSIFIED",
+            entities=[
+                EntityMapping(
+                    target_entity_type="DOC",
+                    classification_column="doc_clearance",
+                    property_mappings={"id": PropertyMapping(source_field="id")},
+                )
+            ],
+        )
+        record = {"id": "X1", "doc_clearance": "SECRET"}
+        results = mapper.map_record(record, config)
+        assert results[0]["classification"] == "SECRET"
+
+    def test_classification_column_falls_back_to_override(self, mapper: DynamicMapper) -> None:
+        config = MappingConfig(
+            source_system_name="SYS",
+            default_classification="UNCLASSIFIED",
+            entities=[
+                EntityMapping(
+                    target_entity_type="DOC",
+                    classification_column="doc_clearance",
+                    classification_override="CONFIDENTIAL",
+                    property_mappings={"id": PropertyMapping(source_field="id")},
+                )
+            ],
+        )
+        # Column absent from record → use override
+        record = {"id": "X1"}
+        results = mapper.map_record(record, config)
+        assert results[0]["classification"] == "CONFIDENTIAL"
+
+    def test_classification_column_falls_back_to_default_when_empty(
+        self, mapper: DynamicMapper
+    ) -> None:
+        config = MappingConfig(
+            source_system_name="SYS",
+            default_classification="UNCLASSIFIED",
+            entities=[
+                EntityMapping(
+                    target_entity_type="DOC",
+                    classification_column="doc_clearance",
+                    property_mappings={"id": PropertyMapping(source_field="id")},
+                )
+            ],
+        )
+        # Column present but blank → fall back to default_classification
+        record = {"id": "X1", "doc_clearance": "  "}
+        results = mapper.map_record(record, config)
+        assert results[0]["classification"] == "UNCLASSIFIED"
+
+    def test_classification_column_takes_priority_over_override(
+        self, mapper: DynamicMapper
+    ) -> None:
+        config = MappingConfig(
+            source_system_name="SYS",
+            default_classification="UNCLASSIFIED",
+            entities=[
+                EntityMapping(
+                    target_entity_type="DOC",
+                    classification_column="doc_clearance",
+                    classification_override="CONFIDENTIAL",
+                    property_mappings={"id": PropertyMapping(source_field="id")},
+                )
+            ],
+        )
+        # Column present and non-empty → column wins over override
+        record = {"id": "X1", "doc_clearance": "TS/SCI"}
+        results = mapper.map_record(record, config)
+        assert results[0]["classification"] == "TS/SCI"
+
+    def test_link_classification_column_used(self, mapper: DynamicMapper) -> None:
+        config = MappingConfig(
+            source_system_name="SYS",
+            default_classification="UNCLASSIFIED",
+            entities=[
+                EntityMapping(
+                    target_entity_type="PERSON",
+                    property_mappings={"name": PropertyMapping(source_field="officer_name")},
+                ),
+                EntityMapping(
+                    target_entity_type="COMPANY",
+                    property_mappings={"name": PropertyMapping(source_field="company_name")},
+                ),
+            ],
+            links=[
+                LinkMapping(
+                    source_entity_type="PERSON",
+                    target_entity_type="COMPANY",
+                    relationship_type="OFFICER_OF",
+                    classification_column="link_clearance",
+                )
+            ],
+        )
+        record = {"officer_name": "Alice", "company_name": "Acme", "link_clearance": "SECRET"}
+        results = mapper.map_record(record, config)
+        link = results[2]
+        assert link["classification"] == "SECRET"
+
+    def test_link_classification_column_falls_back_to_default(
+        self, mapper: DynamicMapper
+    ) -> None:
+        config = MappingConfig(
+            source_system_name="SYS",
+            default_classification="UNCLASSIFIED",
+            entities=[
+                EntityMapping(
+                    target_entity_type="PERSON",
+                    property_mappings={"name": PropertyMapping(source_field="officer_name")},
+                ),
+                EntityMapping(
+                    target_entity_type="COMPANY",
+                    property_mappings={"name": PropertyMapping(source_field="company_name")},
+                ),
+            ],
+            links=[
+                LinkMapping(
+                    source_entity_type="PERSON",
+                    target_entity_type="COMPANY",
+                    relationship_type="OFFICER_OF",
+                    classification_column="link_clearance",
+                )
+            ],
+        )
+        # Column absent → fall back to default_classification
+        record = {"officer_name": "Alice", "company_name": "Acme"}
+        results = mapper.map_record(record, config)
+        link = results[2]
+        assert link["classification"] == "UNCLASSIFIED"
+
+
 class TestDynamicMapperLinkMapping:
     def test_link_payload_generated(
         self, mapper: DynamicMapper, config_with_link: MappingConfig
