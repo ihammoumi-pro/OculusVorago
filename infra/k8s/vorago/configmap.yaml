@@ -1,0 +1,20 @@
+# =============================================================================
+# OculusVorago — ETL-specific ConfigMap
+#
+# Contains only non-sensitive configuration consumed by the Vorago ETL engine.
+# Platform-wide and shared configuration is managed by OculusCodex.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vorago-config
+  namespace: oculus
+  labels:
+    app.kubernetes.io/name: vorago
+    app.kubernetes.io/component: etl-engine
+data:
+  # Kafka topic that Vorago publishes mapped payloads to
+  KAFKA_TOPIC: "oculus.ingestion.raw"
+
+  # Python logging level for all Vorago pipeline runs
+  LOG_LEVEL: "INFO"

@@ -12,8 +12,7 @@ metadata:
   name: vorago-batch-icij-2024
   namespace: oculus
   labels:
-    app: vorago-batch
-    app.kubernetes.io/part-of: oculus-platform
+    app.kubernetes.io/name: vorago
     app.kubernetes.io/component: etl-batch
 spec:
   # Retry up to 3 times on failure before marking the Job as failed
@@ -23,8 +22,7 @@ spec:
   template:
     metadata:
       labels:
-        app: vorago-batch
-        app.kubernetes.io/part-of: oculus-platform
+        app.kubernetes.io/name: vorago
         app.kubernetes.io/component: etl-batch
     spec:
       containers:
@@ -49,13 +47,13 @@ spec:
             - name: KAFKA_BOOTSTRAP_SERVERS
               valueFrom:
                 secretKeyRef:
-                  name: oculus-kafka-secret
+                  name: vorago-secret
                   key: KAFKA_BOOTSTRAP_SERVERS
             - name: LOG_LEVEL
               valueFrom:
                 configMapKeyRef:
-                  name: oculus-app-config
-                  key: VORAGO_LOG_LEVEL
+                  name: vorago-config
+                  key: LOG_LEVEL
           resources:
             requests:
               cpu: "500m"
@@ -64,14 +62,17 @@ spec:
               cpu: "2000m"
               memory: "4Gi"
           volumeMounts:
-            # Mount your input data here.  Create a PVC named "vorago-data-pvc"
-            # and pre-populate it with the CSV files to process.
             - name: data-volume
               mountPath: /data
               readOnly: true
+            # Writable /tmp for OCR (pytesseract) and PDF (pdf2image) temp files
+            - name: tmp
+              mountPath: /tmp
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            # Root filesystem is read-only; OCR (pytesseract) and PDF (pdf2image)
+            # libraries write temp files to /tmp which is mounted as emptyDir below.
+            readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 1001
       restartPolicy: Never
@@ -81,3 +82,6 @@ spec:
         - name: data-volume
           persistentVolumeClaim:
             claimName: vorago-data-pvc
+        # Writable scratch space for OCR and PDF processing temp files
+        - name: tmp
+          emptyDir: {}
