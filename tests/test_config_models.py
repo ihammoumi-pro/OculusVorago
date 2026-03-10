@@ -72,6 +72,34 @@ class TestMappingConfigValidation:
         )
         assert entity.classification_override == "SECRET"
 
+    def test_classification_column_on_entity(self) -> None:
+        entity = EntityMapping(
+            target_entity_type="T",
+            classification_column="doc_clearance",
+        )
+        assert entity.classification_column == "doc_clearance"
+
+    def test_classification_column_defaults_to_none(self) -> None:
+        entity = EntityMapping(target_entity_type="T")
+        assert entity.classification_column is None
+
+    def test_classification_column_on_link(self) -> None:
+        link = LinkMapping(
+            source_entity_type="PERSON",
+            target_entity_type="COMPANY",
+            relationship_type="OFFICER_OF",
+            classification_column="link_clearance",
+        )
+        assert link.classification_column == "link_clearance"
+
+    def test_link_classification_column_defaults_to_none(self) -> None:
+        link = LinkMapping(
+            source_entity_type="PERSON",
+            target_entity_type="COMPANY",
+            relationship_type="OFFICER_OF",
+        )
+        assert link.classification_column is None
+
     def test_model_validate_from_dict(self) -> None:
         raw = {
             "source_system_name": "FROM_DICT",

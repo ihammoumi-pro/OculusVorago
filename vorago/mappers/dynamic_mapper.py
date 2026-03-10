@@ -87,6 +87,27 @@ def _cast_value(value: Any, cast_as: str | None) -> Any:
     return caster(value)
 
 
+def _resolve_classification(
+    record: dict[str, Any],
+    mapping: EntityMapping | LinkMapping,
+    config: MappingConfig,
+) -> str:
+    """Determine the classification label for a single payload.
+
+    Resolution order (highest → lowest priority):
+
+    1. Value read from *classification_column* in the raw record (if the column
+       is configured and the value is non-empty).
+    2. *classification_override* set on the entity/link mapping.
+    3. *default_classification* from the top-level :class:`MappingConfig`.
+    """
+    if mapping.classification_column:
+        col_value = record.get(mapping.classification_column)
+        if col_value is not None and str(col_value).strip():
+            return str(col_value).strip()
+    return mapping.classification_override or config.default_classification
+
+
 # ---------------------------------------------------------------------------
 # Mapper implementation
 # ---------------------------------------------------------------------------
@@ -164,10 +185,12 @@ class DynamicMapper(IMapper):
                 # Keep the raw string value rather than dropping the field
                 properties[target_prop] = str(raw_value)
 
+        classification = _resolve_classification(record, mapping, config)
+
         return {
             "source_system": config.source_system_name,
             "entity_type": mapping.target_entity_type,
-            "classification": mapping.classification_override or config.default_classification,
+            "classification": classification,
             "properties": properties,
         }
 
@@ -193,10 +216,12 @@ class DynamicMapper(IMapper):
                 )
                 properties[target_prop] = str(raw_value)
 
+        classification = _resolve_classification(record, mapping, config)
+
         return {
             "source_system": config.source_system_name,
             "entity_type": mapping.relationship_type,
-            "classification": mapping.classification_override or config.default_classification,
+            "classification": classification,
             "properties": {
                 **properties,
                 "_source_entity_type": mapping.source_entity_type,

@@ -25,8 +25,14 @@ entities:
   # Some officers are companies — for a production deployment you would
   # add a second entity block with target_entity_type: ORGANIZATION and use
   # a conditional field or a separate config file.
+  #
+  # classification_column: if the source CSV contains a column that carries
+  # the document clearance level (e.g. "doc_clearance"), set this field so
+  # the mapper extracts the label dynamically per-row.  Falls back to
+  # classification_override (if set) then the top-level default_classification.
   # -----------------------------------------------------------------------
   - target_entity_type: PERSON
+    # classification_column: doc_clearance   # uncomment to read per-row label
     property_mappings:
       node_id:
         source_field: node_id
