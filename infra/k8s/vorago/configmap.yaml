@@ -1,0 +1,24 @@
+# =============================================================================
+# OculusVorago — ETL-specific ConfigMap
+#
+# Contains ONLY Vorago-specific non-sensitive configuration.
+# Platform-wide config (Kafka endpoints, Postgres DSNs, etc.) is provided by
+# OculusCodex ConfigMaps (oculus-kafka-config, oculus-postgres-config,
+# oculus-platform-config) mounted via envFrom.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vorago-config
+  namespace: oculus-apps
+  labels:
+    app.kubernetes.io/name: vorago
+    app.kubernetes.io/component: etl-engine
+    app.kubernetes.io/managed-by: OculusCodex
+data:
+  # Kafka topic that Vorago publishes mapped payloads to.
+  # Provisioned by OculusCodex specifically for Vorago workloads.
+  KAFKA_TOPIC: "vorago.etl-jobs"
+
+  # Python logging level for all Vorago pipeline runs
+  LOG_LEVEL: "INFO"

@@ -1,0 +1,102 @@
+# =============================================================================
+# OculusVorago — Scheduled Batch ETL CronJob
+# Use this manifest to run the ETL pipeline on a recurring schedule,
+# e.g. nightly ingestion of updated datasets.
+#
+# Adjust the "schedule" field (standard cron syntax) and the pipeline
+# args (--source, --config, etc.) to match your use-case.
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vorago-scheduled-ingest
+  namespace: oculus-apps
+  labels:
+    app.kubernetes.io/name: vorago
+    app.kubernetes.io/component: etl-scheduled
+    app.kubernetes.io/managed-by: OculusCodex
+spec:
+  # Run every night at 02:00 UTC — adjust to your requirements
+  schedule: "0 2 * * *"
+  # Prevent concurrent job runs (e.g. if a previous run is still executing)
+  concurrencyPolicy: Forbid
+  # Keep the last 3 successful Job records for debugging
+  successfulJobsHistoryLimit: 3
+  # Keep the last 1 failed Job record for debugging
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: vorago
+            app.kubernetes.io/component: etl-scheduled
+            app.kubernetes.io/managed-by: OculusCodex
+        spec:
+          containers:
+            - name: vorago
+              image: ghcr.io/ihammoumi-pro/oculus-vorago:latest
+              imagePullPolicy: Always
+              # ENTRYPOINT is ["python", "main.py"] — supply the pipeline arguments here.
+              args:
+                - "run-pipeline"
+                - "--extractor"
+                - "csv"
+                - "--source"
+                - "/data/input.csv"
+                - "--config"
+                - "/configs/icij_mapping.yaml"
+                - "--loader"
+                - "kafka"
+                - "--log-level"
+                - "INFO"
+              # Global platform ConfigMaps/Secrets are mounted via envFrom as required
+              # by the OculusCodex platform convention (see OculusCodex PR #1).
+              # This pattern loads all keys from each resource; the keys consumed by
+              # Vorago are: KAFKA_BOOTSTRAP_SERVERS (oculus-kafka-config),
+              # LOG_LEVEL and KAFKA_TOPIC (vorago-config).
+              # App-specific refs are listed last so their values win on any collision.
+              envFrom:
+                - configMapRef:
+                    name: oculus-kafka-config
+                - configMapRef:
+                    name: oculus-postgres-config
+                - configMapRef:
+                    name: oculus-platform-config
+                - secretRef:
+                    name: global-platform-secrets
+                - configMapRef:
+                    name: vorago-config      # Vorago-specific keys (KAFKA_TOPIC, LOG_LEVEL)
+                - secretRef:
+                    name: vorago-secret      # Vorago-specific secrets (reserved for future use)
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "1Gi"
+                limits:
+                  cpu: "2000m"
+                  memory: "4Gi"
+              volumeMounts:
+                - name: data-volume
+                  mountPath: /data
+                  readOnly: true
+                # Writable /tmp for OCR (pytesseract) and PDF (pdf2image) temp files
+                - name: tmp
+                  mountPath: /tmp
+              securityContext:
+                allowPrivilegeEscalation: false
+                # Root filesystem is read-only; OCR (pytesseract) and PDF (pdf2image)
+                # libraries write temp files to /tmp which is mounted as emptyDir below.
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1001
+          restartPolicy: OnFailure
+          volumes:
+            - name: data-volume
+              persistentVolumeClaim:
+                claimName: vorago-data-pvc
+            # Writable scratch space for OCR and PDF processing temp files
+            - name: tmp
+              emptyDir: {}

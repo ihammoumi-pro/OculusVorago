@@ -1,0 +1,102 @@
+# =============================================================================
+# OculusVorago — Streaming ETL Deployment
+# Use this manifest when Vorago is running in STREAMING mode (continuous
+# ingestion from an API or long-lived Kafka-connected source).
+# For batch / CSV processing, use jobs.yaml or cronjobs.yaml instead.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oculus-vorago-streaming
+  namespace: oculus-apps
+  labels:
+    app.kubernetes.io/name: vorago
+    app.kubernetes.io/component: etl-streaming
+    app.kubernetes.io/managed-by: OculusCodex
+spec:
+  # Default: 1 replica. The ETL process is stateful with respect to the upstream
+  # API cursor; running multiple replicas against the same source will produce
+  # duplicate records unless your data source explicitly supports parallel consumers
+  # (e.g., partitioned Kafka source). Increase to 2+ only after verifying
+  # idempotency or partitioning at the source level.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vorago
+      app.kubernetes.io/component: etl-streaming
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vorago
+        app.kubernetes.io/component: etl-streaming
+        app.kubernetes.io/managed-by: OculusCodex
+    spec:
+      containers:
+        - name: vorago
+          image: ghcr.io/ihammoumi-pro/oculus-vorago:latest
+          imagePullPolicy: Always
+          # ENTRYPOINT is ["python", "main.py"] — pass the CLI arguments here.
+          # Adjust --source and --config to point to your actual data source.
+          args:
+            - "run-pipeline"
+            - "--extractor"
+            - "api"
+            - "--source"
+            - "https://data.example.com/api/records"
+            - "--config"
+            - "/configs/icij_mapping.yaml"
+            - "--loader"
+            - "kafka"
+            - "--log-level"
+            - "INFO"
+          # Global platform ConfigMaps/Secrets are mounted via envFrom as required
+          # by the OculusCodex platform convention (see OculusCodex PR #1).
+          # This pattern loads all keys from each resource; the keys consumed by
+          # Vorago are: KAFKA_BOOTSTRAP_SERVERS (oculus-kafka-config),
+          # LOG_LEVEL and KAFKA_TOPIC (vorago-config).
+          # App-specific refs are listed last so their values win on any collision.
+          envFrom:
+            - configMapRef:
+                name: oculus-kafka-config
+            - configMapRef:
+                name: oculus-postgres-config
+            - configMapRef:
+                name: oculus-platform-config
+            - secretRef:
+                name: global-platform-secrets
+            - configMapRef:
+                name: vorago-config      # Vorago-specific keys (KAFKA_TOPIC, LOG_LEVEL)
+            - secretRef:
+                name: vorago-secret      # Vorago-specific secrets (reserved for future use)
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          volumeMounts:
+            # Writable /tmp for OCR (pytesseract) and PDF (pdf2image) temp files
+            - name: tmp
+              mountPath: /tmp
+          # Liveness probe: verifies the main ETL process (PID 1) is still alive.
+          # The pod is restarted if the process exits or becomes a zombie.
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "kill -0 1"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            failureThreshold: 3
+            timeoutSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            # Root filesystem is read-only; OCR (pytesseract) and PDF (pdf2image)
+            # libraries write temp files to /tmp which is mounted as emptyDir below.
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1001
+      restartPolicy: Always
+      volumes:
+        # Writable scratch space for OCR and PDF processing temp files
+        - name: tmp
+          emptyDir: {}
